@@ -1,0 +1,133 @@
+export type Role = 'cardinal' | 'poisoner' | 'spymaster' | 'envoy' | 'noble';
+
+export type ActionType = 'income' | 'foreign_aid' | 'tax' | 'steal' | 'assassinate' | 'exchange' | 'coup';
+
+export type GamePhase =
+  | 'lobby'
+  | 'action'
+  | 'action_response'
+  | 'block'
+  | 'block_response'
+  | 'lose_influence'
+  | 'exchange'
+  | 'game_over';
+
+export interface Influence {
+  role: Role;
+  revealed: boolean;
+}
+
+export interface Player {
+  id: string;
+  name: string;
+  coins: number;
+  influences: Influence[];
+}
+
+export interface PendingAction {
+  type: ActionType;
+  playerId: string;
+  targetId?: string;
+  claimedRole?: Role;
+}
+
+export interface PendingBlock {
+  blockerId: string;
+  claimedRole: Role;
+}
+
+export type PostLossResolution = 'next_turn' | 'resolve_action' | 'block_window';
+
+export interface GameState {
+  gameCode: string;
+  phase: GamePhase;
+  players: Player[];
+  currentPlayerIndex: number;
+  deck: Role[];
+  pendingAction: PendingAction | null;
+  pendingBlock: PendingBlock | null;
+  resolution: PostLossResolution | null;
+  losingPlayerId: string | null;
+  exchangeCards: Role[];
+  respondedPlayers: Set<string>;
+  hostId: string;
+  turnNumber: number;
+  log: string[];
+  winner: string | null;
+}
+
+export interface SerializedGameState extends Omit<GameState, 'respondedPlayers'> {
+  respondedPlayers: string[];
+}
+
+export interface ClientPlayer {
+  id: string;
+  name: string;
+  coins: number;
+  influenceCount: number;
+  revealedInfluences: Role[];
+  isAlive: boolean;
+  hasResponded: boolean;
+}
+
+export interface ClientState {
+  gameCode: string;
+  phase: GamePhase;
+  players: ClientPlayer[];
+  myId: string;
+  myInfluences: Influence[];
+  currentPlayerId: string;
+  pendingAction: PendingAction | null;
+  pendingBlock: PendingBlock | null;
+  canChallenge: boolean;
+  canBlock: boolean;
+  blockableBy: Role[];
+  mustLoseInfluence: boolean;
+  exchangeOptions: Role[] | null;
+  respondedPlayerIds: string[];
+  winner: string | null;
+  log: string[];
+  isHost: boolean;
+}
+
+export type ClientMessage =
+  | { type: 'join'; name: string }
+  | { type: 'start_game' }
+  | { type: 'action'; action: ActionType; targetId?: string }
+  | { type: 'challenge' }
+  | { type: 'block'; role: Role }
+  | { type: 'pass' }
+  | { type: 'lose_influence'; influenceIndex: number }
+  | { type: 'exchange_select'; kept: number[] }
+  | { type: 'rematch' };
+
+export type ServerMessage =
+  | { type: 'state'; state: ClientState }
+  | { type: 'error'; message: string }
+  | { type: 'joined'; playerId: string; gameCode: string };
+
+export const ALL_ROLES: Role[] = ['cardinal', 'poisoner', 'spymaster', 'envoy', 'noble'];
+
+export const ROLE_NAMES: Record<Role, string> = {
+  cardinal: 'Cardinal',
+  poisoner: 'Poisoner',
+  spymaster: 'Spymaster',
+  envoy: 'Envoy',
+  noble: 'Noble',
+};
+
+export const ACTION_CONFIG: Record<ActionType, {
+  claimedRole?: Role;
+  challengeable: boolean;
+  blockableBy: Role[];
+  cost: number;
+  requiresTarget: boolean;
+}> = {
+  income: { challengeable: false, blockableBy: [], cost: 0, requiresTarget: false },
+  foreign_aid: { challengeable: false, blockableBy: ['cardinal'], cost: 0, requiresTarget: false },
+  tax: { claimedRole: 'cardinal', challengeable: true, blockableBy: [], cost: 0, requiresTarget: false },
+  steal: { claimedRole: 'spymaster', challengeable: true, blockableBy: ['spymaster', 'envoy'], cost: 0, requiresTarget: true },
+  assassinate: { claimedRole: 'poisoner', challengeable: true, blockableBy: ['noble'], cost: 3, requiresTarget: true },
+  exchange: { claimedRole: 'envoy', challengeable: true, blockableBy: [], cost: 0, requiresTarget: false },
+  coup: { challengeable: false, blockableBy: [], cost: 7, requiresTarget: true },
+};

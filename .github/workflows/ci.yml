@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Type check (frontend)
+        run: pnpm exec tsc -b --noEmit
+
+      - name: Type check (server)
+        run: pnpm exec tsc -p tsconfig.server.json --noEmit
+
+      - name: Type check (worker)
+        run: pnpm exec tsc -p tsconfig.worker.json --noEmit
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build frontend
+        run: pnpm build
+
+      - name: Build server
+        run: pnpm build:server
