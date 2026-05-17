@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useWebSocket } from './hooks/useWebSocket';
+import { useGameAPI } from './hooks/useGameAPI';
 import { PlayerList } from './components/lobby/PlayerList';
 import { PlayerBoard } from './components/game/PlayerBoard';
 import { ActionPhase } from './components/game/ActionPhase';
@@ -36,7 +36,7 @@ export default function App() {
   const [name, setName] = useState('');
 
   const wsActive = screen === 'playing';
-  const { gameState, error, connected, send } = useWebSocket(wsActive, gameCode);
+  const { gameState, error, connected, send } = useGameAPI(wsActive, gameCode);
 
   const isInGame = gameState?.myId && gameState.players.some(p => p.id === gameState.myId);
 

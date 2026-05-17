@@ -4,7 +4,6 @@ import { v4 as uuid } from 'uuid';
 import {
   createGame,
   addPlayer,
-  removePlayer,
   startGame,
   declareAction,
   challengeAction,
@@ -42,240 +41,125 @@ export class GameRoom extends DurableObject {
 
   private async saveState(): Promise<void> {
     await this.ctx.storage.put('game', serializeGame(this.game));
+    await this.ctx.storage.put('lastActivity', Date.now());
     await this.ctx.storage.setAlarm(Date.now() + TTL_MS);
   }
 
-  private async broadcastAndSave(): Promise<void> {
-    this.broadcast();
-    await this.saveState();
-  }
-
   async alarm(): Promise<void> {
-    const sockets = this.ctx.getWebSockets();
-    if (sockets.length > 0) {
+    const lastActivity = await this.ctx.storage.get<number>('lastActivity') ?? 0;
+    if (Date.now() - lastActivity > TTL_MS) {
+      await this.ctx.storage.deleteAll();
+    } else {
       await this.ctx.storage.setAlarm(Date.now() + TTL_MS);
-      return;
     }
-    await this.ctx.storage.deleteAll();
   }
 
   async fetch(request: Request): Promise<Response> {
-    const upgrade = request.headers.get('Upgrade');
-    if (upgrade !== 'websocket') {
-      return new Response('Expected WebSocket', { status: 426 });
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/game/join' && request.method === 'POST') {
+      return this.handleJoin(request, url);
+    }
+    if (url.pathname === '/api/game/action' && request.method === 'POST') {
+      return this.handleAction(request);
+    }
+    if (url.pathname === '/api/game/state' && request.method === 'GET') {
+      return this.handleGetState(url);
     }
 
-    const url = new URL(request.url);
+    return Response.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  private async handleJoin(request: Request, url: URL): Promise<Response> {
+    const body = await request.json() as { name?: string; gameCode?: string };
+    const name = body.name;
+
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      return Response.json({ error: 'Name is required' }, { status: 400 });
+    }
+
     const gameCode = url.searchParams.get('code') || 'XXXX';
     if (!this.initialized || !this.game) {
       this.game = createGame(gameCode);
-      await this.saveState();
-    }
-
-    const pair = new WebSocketPair();
-    const [client, server] = Object.values(pair);
-    this.ctx.acceptWebSocket(server);
-
-    return new Response(null, { status: 101, webSocket: client });
-  }
-
-  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    const raw = typeof message === 'string' ? message : new TextDecoder().decode(message);
-
-    let msg: Record<string, unknown>;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
-      this.sendError(ws, 'Invalid message format');
-      return;
-    }
-
-    switch (msg.type) {
-      case 'join':
-        await this.handleJoin(ws, msg);
-        break;
-      case 'start_game':
-        await this.handleStartGame(ws);
-        break;
-      case 'action':
-        await this.handleAction(ws, msg);
-        break;
-      case 'challenge':
-        await this.handleChallenge(ws);
-        break;
-      case 'block':
-        await this.handleBlock(ws, msg);
-        break;
-      case 'pass':
-        await this.handlePass(ws);
-        break;
-      case 'lose_influence':
-        await this.handleLoseInfluence(ws, msg);
-        break;
-      case 'exchange_select':
-        await this.handleExchangeSelect(ws, msg);
-        break;
-      case 'rematch':
-        await this.handleRematch(ws);
-        break;
-      default:
-        this.sendError(ws, 'Unknown message type');
-    }
-  }
-
-  async webSocketClose(ws: WebSocket): Promise<void> {
-    const playerId = this.getPlayerId(ws);
-    if (playerId) {
-      removePlayer(this.game, playerId);
-      await this.broadcastAndSave();
-    }
-  }
-
-  async webSocketError(ws: WebSocket): Promise<void> {
-    const playerId = this.getPlayerId(ws);
-    if (playerId) {
-      removePlayer(this.game, playerId);
-      await this.broadcastAndSave();
-    }
-  }
-
-  private getPlayerId(ws: WebSocket): string | null {
-    const attachment = ws.deserializeAttachment() as { playerId?: string } | null;
-    return attachment?.playerId ?? null;
-  }
-
-  private setPlayerId(ws: WebSocket, playerId: string): void {
-    ws.serializeAttachment({ playerId });
-  }
-
-  private broadcast(): void {
-    for (const ws of this.ctx.getWebSockets()) {
-      const playerId = this.getPlayerId(ws);
-      if (playerId) {
-        try {
-          ws.send(JSON.stringify({ type: 'state', state: getClientState(this.game, playerId) }));
-        } catch {
-          // connection closed
-        }
-      }
-    }
-  }
-
-  private sendTo(ws: WebSocket, msg: Record<string, unknown>): void {
-    try {
-      ws.send(JSON.stringify(msg));
-    } catch {
-      // connection closed
-    }
-  }
-
-  private sendError(ws: WebSocket, message: string): void {
-    this.sendTo(ws, { type: 'error', message });
-  }
-
-  private async handleJoin(ws: WebSocket, msg: Record<string, unknown>): Promise<void> {
-    const name = msg.name as string;
-    if (!name || typeof name !== 'string' || name.trim().length === 0) {
-      this.sendError(ws, 'Name is required');
-      return;
     }
 
     const playerId = uuid();
     if (!addPlayer(this.game, playerId, name.trim())) {
-      this.sendError(ws, this.game.phase !== 'lobby' ? 'Game already in progress' : 'Game is full');
-      return;
+      return Response.json({
+        error: this.game.phase !== 'lobby' ? 'Game already in progress' : 'Game is full',
+      }, { status: 409 });
     }
 
-    this.setPlayerId(ws, playerId);
-    this.sendTo(ws, { type: 'joined', playerId, gameCode: this.game.gameCode });
-    await this.broadcastAndSave();
+    await this.saveState();
+    return Response.json({
+      playerId,
+      gameCode: this.game.gameCode,
+      state: getClientState(this.game, playerId),
+    });
   }
 
-  private async handleStartGame(ws: WebSocket): Promise<void> {
-    const playerId = this.getPlayerId(ws);
-    if (!playerId) return;
-    if (!startGame(this.game, playerId)) {
-      this.sendError(ws, 'Cannot start game');
-      return;
+  private dispatchAction(playerId: string, type: string, params: Record<string, unknown>): { ok: boolean; error: string } {
+    switch (type) {
+      case 'start_game':
+        return { ok: startGame(this.game, playerId), error: 'Cannot start game' };
+      case 'action':
+        return { ok: declareAction(this.game, playerId, params.action as never, params.targetId as string | undefined), error: 'Invalid action' };
+      case 'challenge':
+        if (this.game.phase === 'action_response') return { ok: challengeAction(this.game, playerId), error: 'Cannot challenge' };
+        if (this.game.phase === 'block_response') return { ok: challengeBlock(this.game, playerId), error: 'Cannot challenge' };
+        return { ok: false, error: 'Cannot challenge' };
+      case 'block':
+        return { ok: declareBlock(this.game, playerId, params.role as never), error: 'Cannot block' };
+      case 'pass':
+        return { ok: pass(this.game, playerId), error: 'Cannot pass' };
+      case 'lose_influence':
+        return { ok: loseInfluence(this.game, playerId, params.influenceIndex as number), error: 'Invalid choice' };
+      case 'exchange_select':
+        return { ok: exchangeSelect(this.game, playerId, params.kept as number[]), error: 'Invalid exchange selection' };
+      case 'rematch':
+        return { ok: resetGame(this.game, playerId), error: 'Cannot restart' };
+      default:
+        return { ok: false, error: 'Unknown action type' };
     }
-    await this.broadcastAndSave();
   }
 
-  private async handleAction(ws: WebSocket, msg: Record<string, unknown>): Promise<void> {
-    const playerId = this.getPlayerId(ws);
-    if (!playerId) return;
-    if (!declareAction(this.game, playerId, msg.action as never, msg.targetId as string | undefined)) {
-      this.sendError(ws, 'Invalid action');
-      return;
+  private async handleAction(request: Request): Promise<Response> {
+    const body = await request.json() as Record<string, unknown>;
+    const { playerId, type } = body;
+
+    if (!playerId || !type) {
+      return Response.json({ error: 'Missing playerId or type' }, { status: 400 });
     }
-    await this.broadcastAndSave();
+
+    if (!this.game) {
+      return Response.json({ error: 'Game not found' }, { status: 404 });
+    }
+
+    const result = this.dispatchAction(playerId as string, type as string, body);
+    if (!result.ok) {
+      return Response.json({ error: result.error }, { status: 400 });
+    }
+
+    await this.saveState();
+    return Response.json({ state: getClientState(this.game, playerId as string) });
   }
 
-  private async handleChallenge(ws: WebSocket): Promise<void> {
-    const playerId = this.getPlayerId(ws);
-    if (!playerId) return;
+  private handleGetState(url: URL): Response {
+    const playerId = url.searchParams.get('playerId');
 
-    let ok = false;
-    if (this.game.phase === 'action_response') {
-      ok = challengeAction(this.game, playerId);
-    } else if (this.game.phase === 'block_response') {
-      ok = challengeBlock(this.game, playerId);
+    if (!playerId) {
+      return Response.json({ error: 'Missing playerId' }, { status: 400 });
     }
 
-    if (!ok) {
-      this.sendError(ws, 'Cannot challenge');
-      return;
+    if (!this.game) {
+      return Response.json({ error: 'Game not found' }, { status: 404 });
     }
-    await this.broadcastAndSave();
-  }
 
-  private async handleBlock(ws: WebSocket, msg: Record<string, unknown>): Promise<void> {
-    const playerId = this.getPlayerId(ws);
-    if (!playerId) return;
-    if (!declareBlock(this.game, playerId, msg.role as never)) {
-      this.sendError(ws, 'Cannot block');
-      return;
+    const player = this.game.players.find(p => p.id === playerId);
+    if (!player) {
+      return Response.json({ error: 'Player not in game' }, { status: 404 });
     }
-    await this.broadcastAndSave();
-  }
 
-  private async handlePass(ws: WebSocket): Promise<void> {
-    const playerId = this.getPlayerId(ws);
-    if (!playerId) return;
-    if (!pass(this.game, playerId)) {
-      this.sendError(ws, 'Cannot pass');
-      return;
-    }
-    await this.broadcastAndSave();
-  }
-
-  private async handleLoseInfluence(ws: WebSocket, msg: Record<string, unknown>): Promise<void> {
-    const playerId = this.getPlayerId(ws);
-    if (!playerId) return;
-    if (!loseInfluence(this.game, playerId, msg.influenceIndex as number)) {
-      this.sendError(ws, 'Invalid choice');
-      return;
-    }
-    await this.broadcastAndSave();
-  }
-
-  private async handleExchangeSelect(ws: WebSocket, msg: Record<string, unknown>): Promise<void> {
-    const playerId = this.getPlayerId(ws);
-    if (!playerId) return;
-    if (!exchangeSelect(this.game, playerId, msg.kept as number[])) {
-      this.sendError(ws, 'Invalid exchange selection');
-      return;
-    }
-    await this.broadcastAndSave();
-  }
-
-  private async handleRematch(ws: WebSocket): Promise<void> {
-    const playerId = this.getPlayerId(ws);
-    if (!playerId) return;
-    if (!resetGame(this.game, playerId)) {
-      this.sendError(ws, 'Cannot restart');
-      return;
-    }
-    await this.broadcastAndSave();
+    return Response.json({ state: getClientState(this.game, playerId) });
   }
 }
