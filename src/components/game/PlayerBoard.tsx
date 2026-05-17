@@ -52,7 +52,7 @@ export function PlayerBoard({ state }: PlayerBoardProps) {
                           <RoleCard key={`r-${i}`} role={role} revealed small />
                         ))}
                         {Array.from({ length: p.influenceCount }).map((_, i) => (
-                          <RoleCard key={`h-${i}`} role="cardinal" faceDown small />
+                          <RoleCard key={`h-${i}`} role="duke" faceDown small />
                         ))}
                       </>
                     )

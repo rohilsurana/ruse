@@ -1,4 +1,4 @@
-export type Role = 'cardinal' | 'poisoner' | 'spymaster' | 'envoy' | 'noble';
+export type Role = 'duke' | 'assassin' | 'captain' | 'ambassador' | 'contessa';
 
 export type ActionType = 'income' | 'foreign_aid' | 'tax' | 'steal' | 'assassinate' | 'exchange' | 'coup';
 
@@ -76,27 +76,27 @@ export type ServerMessage =
   | { type: 'joined'; playerId: string; gameCode: string };
 
 export const ROLE_NAMES: Record<Role, string> = {
-  cardinal: 'Cardinal',
-  poisoner: 'Poisoner',
-  spymaster: 'Spymaster',
-  envoy: 'Envoy',
-  noble: 'Noble',
+  duke: 'Duke',
+  assassin: 'Assassin',
+  captain: 'Captain',
+  ambassador: 'Ambassador',
+  contessa: 'Contessa',
 };
 
 export const ROLE_COLORS: Record<Role, string> = {
-  cardinal: 'text-red-400',
-  poisoner: 'text-emerald-400',
-  spymaster: 'text-blue-400',
-  envoy: 'text-amber-400',
-  noble: 'text-purple-400',
+  duke: 'text-red-400',
+  assassin: 'text-emerald-400',
+  captain: 'text-blue-400',
+  ambassador: 'text-amber-400',
+  contessa: 'text-purple-400',
 };
 
 export const ROLE_BG_COLORS: Record<Role, string> = {
-  cardinal: 'bg-red-900/30 border-red-700/40',
-  poisoner: 'bg-emerald-900/30 border-emerald-700/40',
-  spymaster: 'bg-blue-900/30 border-blue-700/40',
-  envoy: 'bg-amber-900/30 border-amber-700/40',
-  noble: 'bg-purple-900/30 border-purple-700/40',
+  duke: 'bg-red-900/30 border-red-700/40',
+  assassin: 'bg-emerald-900/30 border-emerald-700/40',
+  captain: 'bg-blue-900/30 border-blue-700/40',
+  ambassador: 'bg-amber-900/30 border-amber-700/40',
+  contessa: 'bg-purple-900/30 border-purple-700/40',
 };
 
 export const ACTION_LABELS: Record<ActionType, string> = {
@@ -112,10 +112,10 @@ export const ACTION_LABELS: Record<ActionType, string> = {
 export const ACTION_DESCRIPTIONS: Record<ActionType, string> = {
   income: 'Take 1 coin',
   foreign_aid: 'Take 2 coins (blockable)',
-  tax: 'Take 3 coins (as Cardinal)',
-  steal: 'Steal 2 coins (as Spymaster)',
-  assassinate: 'Pay 3, eliminate (as Poisoner)',
-  exchange: 'Swap cards (as Envoy)',
+  tax: 'Take 3 coins (Duke)',
+  steal: 'Steal 2 coins (Captain)',
+  assassinate: 'Pay 3, eliminate (Assassin)',
+  exchange: 'Swap cards (Ambassador)',
   coup: 'Pay 7, force elimination',
 };
 
@@ -126,10 +126,10 @@ export const ACTION_CONFIG: Record<ActionType, {
   requiresTarget: boolean;
 }> = {
   income: { blockableBy: [], cost: 0, requiresTarget: false },
-  foreign_aid: { blockableBy: ['cardinal'], cost: 0, requiresTarget: false },
-  tax: { claimedRole: 'cardinal', blockableBy: [], cost: 0, requiresTarget: false },
-  steal: { claimedRole: 'spymaster', blockableBy: ['spymaster', 'envoy'], cost: 0, requiresTarget: true },
-  assassinate: { claimedRole: 'poisoner', blockableBy: ['noble'], cost: 3, requiresTarget: true },
-  exchange: { claimedRole: 'envoy', blockableBy: [], cost: 0, requiresTarget: false },
+  foreign_aid: { blockableBy: ['duke'], cost: 0, requiresTarget: false },
+  tax: { claimedRole: 'duke', blockableBy: [], cost: 0, requiresTarget: false },
+  steal: { claimedRole: 'captain', blockableBy: ['captain', 'ambassador'], cost: 0, requiresTarget: true },
+  assassinate: { claimedRole: 'assassin', blockableBy: ['contessa'], cost: 3, requiresTarget: true },
+  exchange: { claimedRole: 'ambassador', blockableBy: [], cost: 0, requiresTarget: false },
   coup: { blockableBy: [], cost: 7, requiresTarget: true },
 };

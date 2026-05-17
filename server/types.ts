@@ -1,4 +1,4 @@
-export type Role = 'cardinal' | 'poisoner' | 'spymaster' | 'envoy' | 'noble';
+export type Role = 'duke' | 'assassin' | 'captain' | 'ambassador' | 'contessa';
 
 export type ActionType = 'income' | 'foreign_aid' | 'tax' | 'steal' | 'assassinate' | 'exchange' | 'coup';
 
@@ -106,14 +106,14 @@ export type ServerMessage =
   | { type: 'error'; message: string }
   | { type: 'joined'; playerId: string; gameCode: string };
 
-export const ALL_ROLES: Role[] = ['cardinal', 'poisoner', 'spymaster', 'envoy', 'noble'];
+export const ALL_ROLES: Role[] = ['duke', 'assassin', 'captain', 'ambassador', 'contessa'];
 
 export const ROLE_NAMES: Record<Role, string> = {
-  cardinal: 'Cardinal',
-  poisoner: 'Poisoner',
-  spymaster: 'Spymaster',
-  envoy: 'Envoy',
-  noble: 'Noble',
+  duke: 'Duke',
+  assassin: 'Assassin',
+  captain: 'Captain',
+  ambassador: 'Ambassador',
+  contessa: 'Contessa',
 };
 
 export const ACTION_CONFIG: Record<ActionType, {
@@ -124,10 +124,10 @@ export const ACTION_CONFIG: Record<ActionType, {
   requiresTarget: boolean;
 }> = {
   income: { challengeable: false, blockableBy: [], cost: 0, requiresTarget: false },
-  foreign_aid: { challengeable: false, blockableBy: ['cardinal'], cost: 0, requiresTarget: false },
-  tax: { claimedRole: 'cardinal', challengeable: true, blockableBy: [], cost: 0, requiresTarget: false },
-  steal: { claimedRole: 'spymaster', challengeable: true, blockableBy: ['spymaster', 'envoy'], cost: 0, requiresTarget: true },
-  assassinate: { claimedRole: 'poisoner', challengeable: true, blockableBy: ['noble'], cost: 3, requiresTarget: true },
-  exchange: { claimedRole: 'envoy', challengeable: true, blockableBy: [], cost: 0, requiresTarget: false },
+  foreign_aid: { challengeable: false, blockableBy: ['duke'], cost: 0, requiresTarget: false },
+  tax: { claimedRole: 'duke', challengeable: true, blockableBy: [], cost: 0, requiresTarget: false },
+  steal: { claimedRole: 'captain', challengeable: true, blockableBy: ['captain', 'ambassador'], cost: 0, requiresTarget: true },
+  assassinate: { claimedRole: 'assassin', challengeable: true, blockableBy: ['contessa'], cost: 3, requiresTarget: true },
+  exchange: { claimedRole: 'ambassador', challengeable: true, blockableBy: [], cost: 0, requiresTarget: false },
   coup: { challengeable: false, blockableBy: [], cost: 7, requiresTarget: true },
 };

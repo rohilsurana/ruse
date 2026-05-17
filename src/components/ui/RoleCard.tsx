@@ -3,11 +3,11 @@ import type { Role } from '../../lib/types';
 import { ROLE_NAMES } from '../../lib/types';
 
 const ROLE_STYLES: Record<Role, { bg: string; icon: string; accent: string }> = {
-  cardinal: { bg: 'from-red-900 to-red-950', icon: '✝', accent: 'text-red-300' },
-  poisoner: { bg: 'from-emerald-900 to-emerald-950', icon: '☠', accent: 'text-emerald-300' },
-  spymaster: { bg: 'from-blue-900 to-blue-950', icon: '👁', accent: 'text-blue-300' },
-  envoy: { bg: 'from-amber-900 to-amber-950', icon: '📜', accent: 'text-amber-300' },
-  noble: { bg: 'from-purple-900 to-purple-950', icon: '👑', accent: 'text-purple-300' },
+  duke: { bg: 'from-red-900 to-red-950', icon: '👑', accent: 'text-red-300' },
+  assassin: { bg: 'from-emerald-900 to-emerald-950', icon: '🗡', accent: 'text-emerald-300' },
+  captain: { bg: 'from-blue-900 to-blue-950', icon: '⚓', accent: 'text-blue-300' },
+  ambassador: { bg: 'from-amber-900 to-amber-950', icon: '📜', accent: 'text-amber-300' },
+  contessa: { bg: 'from-purple-900 to-purple-950', icon: '🛡', accent: 'text-purple-300' },
 };
 
 interface RoleCardProps {

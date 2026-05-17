@@ -144,7 +144,7 @@ function resolveAction(game: GameState): void {
         game.losingPlayerId = target.id;
         game.resolution = 'next_turn';
         game.respondedPlayers = new Set();
-        game.log.push(`${actor.name} poisoned ${target.name}`);
+        game.log.push(`${actor.name} assassinated ${target.name}`);
       } else {
         advanceTurn(game);
       }
