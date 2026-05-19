@@ -57,6 +57,7 @@ export interface ClientState {
   winner: string | null;
   log: string[];
   isHost: boolean;
+  stateVersion: number;
 }
 
 export type ClientMessage =

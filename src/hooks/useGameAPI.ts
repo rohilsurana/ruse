@@ -8,12 +8,20 @@ export function useGameAPI(active: boolean, gameCode: string | null) {
   const [gameState, setGameState] = useState<ClientState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const sessionRef = useRef<{ playerId: string; gameCode: string } | null>(null);
+  const versionRef = useRef(0);
+
+  const updateState = useCallback((state: ClientState) => {
+    if (state.stateVersion >= versionRef.current) {
+      versionRef.current = state.stateVersion;
+      setGameState(state);
+    }
+  }, []);
 
   const clearSession = useCallback(() => {
     sessionRef.current = null;
+    versionRef.current = 0;
     sessionStorage.removeItem('ruse_player_id');
     sessionStorage.removeItem('ruse_game_code');
   }, []);
@@ -39,20 +47,19 @@ export function useGameAPI(active: boolean, gameCode: string | null) {
         return;
       }
       const data = await res.json();
-      setGameState(data.state);
+      updateState(data.state);
       setConnected(true);
     } catch (e) {
       if ((e as Error).name !== 'AbortError') {
         setConnected(false);
       }
     }
-  }, [clearSession]);
+  }, [clearSession, updateState]);
 
   useEffect(() => {
     if (!active) return;
 
     const abort = new AbortController();
-    abortRef.current = abort;
 
     const existingPlayerId = sessionStorage.getItem('ruse_player_id');
     const existingGameCode = sessionStorage.getItem('ruse_game_code');
@@ -84,7 +91,7 @@ export function useGameAPI(active: boolean, gameCode: string | null) {
           sessionRef.current = { playerId: data.playerId, gameCode: data.gameCode };
           sessionStorage.setItem('ruse_player_id', data.playerId);
           sessionStorage.setItem('ruse_game_code', data.gameCode);
-          setGameState(data.state);
+          updateState(data.state);
           setConnected(true);
         } catch (e) {
           if ((e as Error).name !== 'AbortError') {
@@ -102,9 +109,8 @@ export function useGameAPI(active: boolean, gameCode: string | null) {
     return () => {
       abort.abort();
       clearInterval(pollRef.current);
-      abortRef.current = null;
     };
-  }, [active, gameCode, pollState]);
+  }, [active, gameCode, pollState, updateState]);
 
   const send = useCallback(async (msg: ClientMessage) => {
     const session = sessionRef.current;
@@ -124,12 +130,12 @@ export function useGameAPI(active: boolean, gameCode: string | null) {
         return;
       }
 
-      setGameState(data.state);
+      updateState(data.state);
     } catch {
       setError('Network error');
       setTimeout(() => setError(null), 4000);
     }
-  }, []);
+  }, [updateState]);
 
   return { gameState, error, connected, send };
 }

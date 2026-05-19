@@ -171,6 +171,10 @@ function resolveAction(game: GameState): void {
   }
 }
 
+function bumpVersion(game: GameState): void {
+  game.stateVersion++;
+}
+
 export function createGame(code: string): GameState {
   return {
     gameCode: code,
@@ -186,6 +190,7 @@ export function createGame(code: string): GameState {
     respondedPlayers: new Set(),
     hostId: '',
     turnNumber: 0,
+    stateVersion: 0,
     log: [],
     winner: null,
   };
@@ -195,6 +200,7 @@ export function addPlayer(game: GameState, id: string, name: string): boolean {
   if (game.phase !== 'lobby') return false;
   if (game.players.length >= 6) return false;
   if (game.players.some(p => p.id === id)) return false;
+  bumpVersion(game);
 
   game.players.push({ id, name, coins: 0, influences: [] });
 
@@ -209,6 +215,7 @@ export function removePlayer(game: GameState, playerId: string): boolean {
   if (game.phase !== 'lobby') return false;
   const index = game.players.findIndex(p => p.id === playerId);
   if (index === -1) return false;
+  bumpVersion(game);
 
   game.players.splice(index, 1);
 
@@ -223,6 +230,7 @@ export function startGame(game: GameState, playerId: string): boolean {
   if (game.phase !== 'lobby') return false;
   if (game.hostId !== playerId) return false;
   if (game.players.length < 2) return false;
+  bumpVersion(game);
 
   game.deck = buildDeck();
 
@@ -262,6 +270,7 @@ export function declareAction(
 
   if (current.coins < config.cost) return false;
   if (current.coins >= 10 && actionType !== 'coup') return false;
+  bumpVersion(game);
 
   current.coins -= config.cost;
 
@@ -295,6 +304,7 @@ export function challengeAction(game: GameState, challengerId: string): boolean 
   const challenger = getPlayer(game, challengerId)!;
   const actor = getPlayer(game, action.playerId)!;
   if (!isAlive(challenger)) return false;
+  bumpVersion(game);
 
   const claimedRole = action.claimedRole!;
   const actorHasRole = actor.influences.some(i => !i.revealed && i.role === claimedRole);
@@ -337,6 +347,7 @@ export function declareBlock(game: GameState, blockerId: string, claimedRole: Ro
   if (!isAlive(blocker)) return false;
 
   if (action.type !== 'foreign_aid' && blockerId !== action.targetId) return false;
+  bumpVersion(game);
 
   const actor = getPlayer(game, action.playerId)!;
   game.pendingBlock = { blockerId, claimedRole };
@@ -355,6 +366,7 @@ export function challengeBlock(game: GameState, challengerId: string): boolean {
   const challenger = getPlayer(game, challengerId)!;
   const blocker = getPlayer(game, block.blockerId)!;
   if (!isAlive(challenger)) return false;
+  bumpVersion(game);
 
   const blockerHasRole = blocker.influences.some(i => !i.revealed && i.role === block.claimedRole);
 
@@ -392,6 +404,7 @@ export function pass(game: GameState, playerId: string): boolean {
   const eligible = getEligibleResponders(game);
   if (!eligible.includes(playerId)) return false;
   if (game.respondedPlayers.has(playerId)) return false;
+  bumpVersion(game);
 
   game.respondedPlayers.add(playerId);
 
@@ -426,6 +439,7 @@ export function loseInfluence(game: GameState, playerId: string, influenceIndex:
   const player = getPlayer(game, playerId)!;
   if (influenceIndex < 0 || influenceIndex >= player.influences.length) return false;
   if (player.influences[influenceIndex].revealed) return false;
+  bumpVersion(game);
 
   player.influences[influenceIndex].revealed = true;
   game.log.push(`${player.name} revealed ${ROLE_NAMES[player.influences[influenceIndex].role]}`);
@@ -467,6 +481,7 @@ export function exchangeSelect(game: GameState, playerId: string, keptIndices: n
   const options = game.exchangeCards;
   if (keptIndices.some(i => i < 0 || i >= options.length)) return false;
   if (new Set(keptIndices).size !== keptIndices.length) return false;
+  bumpVersion(game);
 
   const kept = keptIndices.map(i => options[i]);
   const returned = options.filter((_, i) => !keptIndices.includes(i));
@@ -491,6 +506,7 @@ export function exchangeSelect(game: GameState, playerId: string, keptIndices: n
 export function resetGame(game: GameState, playerId: string): boolean {
   if (game.phase !== 'game_over') return false;
   if (game.hostId !== playerId) return false;
+  bumpVersion(game);
 
   game.phase = 'lobby';
   game.deck = [];
@@ -564,6 +580,7 @@ export function getClientState(game: GameState, playerId: string): ClientState {
     winner: game.winner,
     log: game.log.slice(-10),
     isHost: playerId === game.hostId,
+    stateVersion: game.stateVersion,
   };
 }
 

@@ -52,6 +52,7 @@ export interface GameState {
   respondedPlayers: Set<string>;
   hostId: string;
   turnNumber: number;
+  stateVersion: number;
   log: string[];
   winner: string | null;
 }
@@ -88,6 +89,7 @@ export interface ClientState {
   winner: string | null;
   log: string[];
   isHost: boolean;
+  stateVersion: number;
 }
 
 export type ClientMessage =
