@@ -1,11 +1,27 @@
 import { motion } from 'framer-motion';
-import type { ClientState, ClientMessage, Role } from '../../lib/types';
-import { ROLE_NAMES, ACTION_LABELS } from '../../lib/types';
+import type { ClientState, ClientMessage, Role, ActionType } from '../../lib/types';
+import { ROLE_NAMES, ACTION_CONFIG } from '../../lib/types';
 import { Button } from '../ui/Button';
 
 interface ResponsePhaseProps {
   state: ClientState;
   send: (msg: ClientMessage) => void;
+}
+
+function actionPhrase(type: ActionType, targetName?: string): string {
+  switch (type) {
+    case 'income': return 'take income';
+    case 'foreign_aid': return 'take foreign aid';
+    case 'tax': return 'collect tax';
+    case 'steal': return `steal from ${targetName}`;
+    case 'assassinate': return `assassinate ${targetName}`;
+    case 'exchange': return 'exchange influence';
+    case 'coup': return `launch a coup on ${targetName}`;
+  }
+}
+
+function roleList(roles: Role[]): string {
+  return roles.map(r => ROLE_NAMES[r]).join(' or ');
 }
 
 export function ResponsePhase({ state, send }: ResponsePhaseProps) {
@@ -14,11 +30,18 @@ export function ResponsePhase({ state, send }: ResponsePhaseProps) {
   const target = players.find(p => p.id === pendingAction?.targetId);
   const blocker = players.find(p => p.id === pendingBlock?.blockerId);
 
-  const description = phase === 'action_response'
-    ? `${actor?.name} claims ${ROLE_NAMES[pendingAction?.claimedRole as Role]} to ${ACTION_LABELS[pendingAction?.type ?? 'income'].toLowerCase()}${target ? ` on ${target.name}` : ''}`
-    : phase === 'block'
-      ? `${actor?.name} wants to ${ACTION_LABELS[pendingAction?.type ?? 'income'].toLowerCase()}${target ? ` on ${target.name}` : ''} — anyone can block`
-      : `${blocker?.name} claims ${ROLE_NAMES[pendingBlock?.claimedRole as Role]} to block`;
+  const type = pendingAction?.type ?? 'income';
+  const phrase = actionPhrase(type, target?.name);
+  const blockers = ACTION_CONFIG[type].blockableBy;
+
+  const description =
+    phase === 'action_response'
+      ? `${actor?.name} claims ${ROLE_NAMES[pendingAction?.claimedRole as Role]} to ${phrase}`
+      : phase === 'block'
+        ? type === 'foreign_aid'
+          ? `${actor?.name} wants to take foreign aid — anyone may block as ${roleList(blockers)}`
+          : `${actor?.name} wants to ${phrase} — ${target?.name} may block as ${roleList(blockers)}`
+        : `${blocker?.name} claims ${ROLE_NAMES[pendingBlock?.claimedRole as Role]} to block`;
 
   const waitingFor = players.filter(p => {
     if (!p.isAlive) return false;
@@ -60,7 +83,7 @@ export function ResponsePhase({ state, send }: ResponsePhaseProps) {
             </Button>
           ))}
           <Button variant="ghost" onClick={() => send({ type: 'pass' })} className="w-full">
-            Pass
+            {canBlock && !canChallenge ? 'Allow' : 'Pass'}
           </Button>
         </div>
       )}
