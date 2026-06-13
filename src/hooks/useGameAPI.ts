@@ -22,8 +22,8 @@ export function useGameAPI(active: boolean, gameCode: string | null) {
   const clearSession = useCallback(() => {
     sessionRef.current = null;
     versionRef.current = 0;
-    sessionStorage.removeItem('ruse_player_id');
-    sessionStorage.removeItem('ruse_game_code');
+    localStorage.removeItem('ruse_player_id');
+    localStorage.removeItem('ruse_game_code');
   }, []);
 
   const pollState = useCallback(async (signal: AbortSignal) => {
@@ -61,15 +61,15 @@ export function useGameAPI(active: boolean, gameCode: string | null) {
 
     const abort = new AbortController();
 
-    const existingPlayerId = sessionStorage.getItem('ruse_player_id');
-    const existingGameCode = sessionStorage.getItem('ruse_game_code');
+    const existingPlayerId = localStorage.getItem('ruse_player_id');
+    const existingGameCode = localStorage.getItem('ruse_game_code');
 
     async function init() {
       if (existingPlayerId && existingGameCode) {
         sessionRef.current = { playerId: existingPlayerId, gameCode: existingGameCode };
         await pollState(abort.signal);
       } else {
-        const playerName = sessionStorage.getItem('ruse_player_name');
+        const playerName = localStorage.getItem('ruse_player_name');
         if (!playerName) return;
 
         try {
@@ -89,8 +89,8 @@ export function useGameAPI(active: boolean, gameCode: string | null) {
 
           const data = await res.json();
           sessionRef.current = { playerId: data.playerId, gameCode: data.gameCode };
-          sessionStorage.setItem('ruse_player_id', data.playerId);
-          sessionStorage.setItem('ruse_game_code', data.gameCode);
+          localStorage.setItem('ruse_player_id', data.playerId);
+          localStorage.setItem('ruse_game_code', data.gameCode);
           updateState(data.state);
           setConnected(true);
         } catch (e) {

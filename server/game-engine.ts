@@ -529,6 +529,29 @@ export function resetGame(game: GameState, playerId: string): boolean {
   return true;
 }
 
+/**
+ * Returns the single player whose input the game is currently waiting on, or
+ * null if no one needs to act (lobby / game over). Response phases are
+ * serialized in seating order, which is what single-device (pass-and-play)
+ * mode needs to prompt one player at a time.
+ */
+export function getActiveActor(game: GameState): string | null {
+  switch (game.phase) {
+    case 'action':
+      return getCurrentPlayer(game)?.id ?? null;
+    case 'exchange':
+      return game.pendingAction?.playerId ?? null;
+    case 'lose_influence':
+      return game.losingPlayerId;
+    case 'action_response':
+    case 'block':
+    case 'block_response':
+      return getEligibleResponders(game).find(id => !game.respondedPlayers.has(id)) ?? null;
+    default:
+      return null;
+  }
+}
+
 export function getClientState(game: GameState, playerId: string): ClientState {
   const player = getPlayer(game, playerId);
   const currentPlayer = game.phase !== 'lobby' && game.phase !== 'game_over'
