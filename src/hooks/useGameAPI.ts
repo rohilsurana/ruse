@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import type { ClientState, ClientMessage } from '../lib/types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/game';
-const POLL_INTERVAL = 1500;
+const VISIBLE_POLL_MS = 800;
+const HIDDEN_POLL_MS = 3000;
 
 export function useGameAPI(active: boolean, gameCode: string | null) {
   const [gameState, setGameState] = useState<ClientState | null>(null);
@@ -60,6 +61,15 @@ export function useGameAPI(active: boolean, gameCode: string | null) {
     if (!active) return;
 
     const abort = new AbortController();
+    let onVisibility: (() => void) | null = null;
+
+    const armPolling = () => {
+      clearInterval(pollRef.current);
+      pollRef.current = setInterval(
+        () => pollState(abort.signal),
+        document.hidden ? HIDDEN_POLL_MS : VISIBLE_POLL_MS,
+      );
+    };
 
     const existingPlayerId = localStorage.getItem('ruse_player_id');
     const existingGameCode = localStorage.getItem('ruse_game_code');
@@ -101,7 +111,12 @@ export function useGameAPI(active: boolean, gameCode: string | null) {
         }
       }
 
-      pollRef.current = setInterval(() => pollState(abort.signal), POLL_INTERVAL);
+      onVisibility = () => {
+        if (!document.hidden) void pollState(abort.signal);
+        armPolling();
+      };
+      document.addEventListener('visibilitychange', onVisibility);
+      armPolling();
     }
 
     init();
@@ -109,6 +124,7 @@ export function useGameAPI(active: boolean, gameCode: string | null) {
     return () => {
       abort.abort();
       clearInterval(pollRef.current);
+      if (onVisibility) document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [active, gameCode, pollState, updateState]);
 
