@@ -12,6 +12,7 @@ import { ExchangePhase } from './components/game/ExchangePhase';
 import { GameOver } from './components/game/GameOver';
 import { GameLog } from './components/game/GameLog';
 import { PassDevice } from './components/game/PassDevice';
+import { HowToPlay } from './components/HowToPlay';
 import { EventBanner } from './components/game/EventBanner';
 import { CountdownTimer } from './components/game/CountdownTimer';
 import { useTurnAlert } from './hooks/useTurnAlert';
@@ -20,7 +21,7 @@ import { Button } from './components/ui/Button';
 import { Input } from './components/ui/Input';
 import type { ClientState, ClientMessage } from './lib/types';
 
-type View = 'menu' | 'create' | 'join' | 'online' | 'local';
+type View = 'menu' | 'create' | 'join' | 'online' | 'local' | 'rules';
 
 function getInitialState(): { view: View; gameCode: string | null } {
   const params = new URLSearchParams(window.location.search);
@@ -97,7 +98,12 @@ export default function App() {
               onCreate={() => setView('create')}
               onJoin={() => setView('join')}
               onLocal={() => setView('local')}
+              onRules={() => setView('rules')}
             />
+          )}
+
+          {view === 'rules' && (
+            <HowToPlay key="rules" onBack={() => setView('menu')} />
           )}
 
           {view === 'create' && (
@@ -136,7 +142,12 @@ export default function App() {
   );
 }
 
-function Menu({ onCreate, onJoin, onLocal }: { onCreate: () => void; onJoin: () => void; onLocal: () => void }) {
+function Menu({ onCreate, onJoin, onLocal, onRules }: {
+  onCreate: () => void;
+  onJoin: () => void;
+  onLocal: () => void;
+  onRules: () => void;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -155,6 +166,12 @@ function Menu({ onCreate, onJoin, onLocal }: { onCreate: () => void; onJoin: () 
         <div className="h-px flex-1 bg-gold/15" />
       </div>
       <Button onClick={onLocal} variant="secondary" className="w-full">Single Device — Pass &amp; Play</Button>
+      <button
+        onClick={onRules}
+        className="text-parchment/40 hover:text-gold text-sm transition-colors cursor-pointer mt-1"
+      >
+        How to play
+      </button>
     </motion.div>
   );
 }
