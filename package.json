@@ -12,6 +12,8 @@
     "build:server": "tsc -p tsconfig.server.json",
     "build:all": "pnpm build && pnpm build:server",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "vite preview",
     "deploy": "pnpm build && wrangler deploy",
     "dev:cf": "pnpm build && wrangler dev"
@@ -44,6 +46,7 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
     "vite": "^8.0.10",
+    "vitest": "^4.1.8",
     "wrangler": "^4.90.0"
   },
   "pnpm": {
