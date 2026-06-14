@@ -14,9 +14,24 @@ import {
   exchangeSelect,
   resetGame,
   getClientState,
+  autoResolve,
+  phaseTimeoutMs,
   serializeGame,
   deserializeGame,
 } from '../server/game-engine';
+
+function touchDeadline(game: GameState): void {
+  const ms = phaseTimeoutMs(game.phase);
+  game.phaseDeadline = ms == null ? null : Date.now() + ms;
+}
+
+function enforceDeadline(game: GameState): void {
+  let guard = 0;
+  while (game.phaseDeadline != null && Date.now() > game.phaseDeadline && guard++ < 32) {
+    autoResolve(game);
+    touchDeadline(game);
+  }
+}
 
 const TTL_MS = 2 * 60 * 60 * 1000;
 
@@ -94,7 +109,7 @@ export class GameRoom extends DurableObject {
     return Response.json({
       playerId,
       gameCode: this.game.gameCode,
-      state: getClientState(this.game, playerId),
+      state: getClientState(this.game, playerId, Date.now()),
     });
   }
 
@@ -140,11 +155,12 @@ export class GameRoom extends DurableObject {
       return Response.json({ error: result.error }, { status: 400 });
     }
 
+    touchDeadline(this.game);
     await this.saveState();
-    return Response.json({ state: getClientState(this.game, playerId as string) });
+    return Response.json({ state: getClientState(this.game, playerId as string, Date.now()) });
   }
 
-  private handleGetState(url: URL): Response {
+  private async handleGetState(url: URL): Promise<Response> {
     const playerId = url.searchParams.get('playerId');
 
     if (!playerId) {
@@ -160,6 +176,10 @@ export class GameRoom extends DurableObject {
       return Response.json({ error: 'Player not in game' }, { status: 404 });
     }
 
-    return Response.json({ state: getClientState(this.game, playerId) });
+    const before = this.game.stateVersion;
+    enforceDeadline(this.game);
+    if (this.game.stateVersion !== before) await this.saveState();
+
+    return Response.json({ state: getClientState(this.game, playerId, Date.now()) });
   }
 }

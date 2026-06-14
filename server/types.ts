@@ -38,6 +38,16 @@ export interface PendingBlock {
 
 export type PostLossResolution = 'next_turn' | 'resolve_action' | 'block_window';
 
+export interface GameEvent {
+  seq: number;
+  kind: 'challenge';
+  context: 'action' | 'block';
+  challengerName: string;
+  claimantName: string;
+  claimedRole: Role;
+  proven: boolean;
+}
+
 export interface GameState {
   gameCode: string;
   phase: GamePhase;
@@ -53,6 +63,9 @@ export interface GameState {
   hostId: string;
   turnNumber: number;
   stateVersion: number;
+  phaseDeadline: number | null;
+  eventSeq: number;
+  lastEvent: GameEvent | null;
   log: string[];
   winner: string | null;
 }
@@ -90,6 +103,9 @@ export interface ClientState {
   log: string[];
   isHost: boolean;
   stateVersion: number;
+  deadline: number | null;
+  serverNow: number;
+  lastEvent: GameEvent | null;
 }
 
 export type ClientMessage =

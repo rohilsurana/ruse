@@ -33,15 +33,23 @@ export function ResponsePhase({ state, send }: ResponsePhaseProps) {
   const type = pendingAction?.type ?? 'income';
   const phrase = actionPhrase(type, target?.name);
   const blockers = ACTION_CONFIG[type].blockableBy;
+  const blockHint = blockers.length
+    ? ` — ${type === 'foreign_aid' ? 'anyone' : target?.name} may block as ${roleList(blockers)}`
+    : '';
 
-  const description =
-    phase === 'action_response'
-      ? `${actor?.name} claims ${ROLE_NAMES[pendingAction?.claimedRole as Role]} to ${phrase}`
-      : phase === 'block'
-        ? type === 'foreign_aid'
-          ? `${actor?.name} wants to take foreign aid — anyone may block as ${roleList(blockers)}`
-          : `${actor?.name} wants to ${phrase} — ${target?.name} may block as ${roleList(blockers)}`
-        : `${blocker?.name} claims ${ROLE_NAMES[pendingBlock?.claimedRole as Role]} to block`;
+  let description: string;
+  if (phase === 'block_response') {
+    description = `${blocker?.name} claims ${ROLE_NAMES[pendingBlock?.claimedRole as Role]} to block`;
+  } else if (phase === 'block') {
+    // Post-challenge block window (targeted actions only).
+    description = `${actor?.name} wants to ${phrase}${blockHint}`;
+  } else {
+    // Combined action window.
+    const base = pendingAction?.claimedRole
+      ? `${actor?.name} claims ${ROLE_NAMES[pendingAction.claimedRole]} to ${phrase}`
+      : `${actor?.name} wants to ${phrase}`;
+    description = `${base}${blockHint}`;
+  }
 
   const waitingFor = players.filter(p => {
     if (!p.isAlive) return false;

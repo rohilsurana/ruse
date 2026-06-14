@@ -1,6 +1,7 @@
 import type {
   Role,
   ActionType,
+  GamePhase,
   GameState,
   Player,
   ClientState,
@@ -175,6 +176,25 @@ function bumpVersion(game: GameState): void {
   game.stateVersion++;
 }
 
+function recordChallenge(
+  game: GameState,
+  challengerName: string,
+  claimantName: string,
+  claimedRole: Role,
+  proven: boolean,
+  context: 'action' | 'block',
+): void {
+  game.lastEvent = {
+    seq: ++game.eventSeq,
+    kind: 'challenge',
+    context,
+    challengerName,
+    claimantName,
+    claimedRole,
+    proven,
+  };
+}
+
 export function createGame(code: string): GameState {
   return {
     gameCode: code,
@@ -191,6 +211,9 @@ export function createGame(code: string): GameState {
     hostId: '',
     turnNumber: 0,
     stateVersion: 0,
+    phaseDeadline: null,
+    eventSeq: 0,
+    lastEvent: null,
     log: [],
     winner: null,
   };
@@ -284,13 +307,14 @@ export function declareAction(
 
   if (!config.challengeable && config.blockableBy.length === 0) {
     resolveAction(game);
-  } else if (!config.challengeable) {
-    game.phase = 'block';
+  } else {
+    // Combined window: from one prompt, any eligible player may challenge
+    // (if the action claims a role) or block (if they're an eligible blocker)
+    // or allow.
+    game.phase = 'action_response';
     if (getEligibleResponders(game).length === 0) {
       resolveAction(game);
     }
-  } else {
-    game.phase = 'action_response';
   }
 
   return true;
@@ -308,6 +332,7 @@ export function challengeAction(game: GameState, challengerId: string): boolean 
 
   const claimedRole = action.claimedRole!;
   const actorHasRole = actor.influences.some(i => !i.revealed && i.role === claimedRole);
+  recordChallenge(game, challenger.name, actor.name, claimedRole, actorHasRole, 'action');
 
   if (actorHasRole) {
     const cardIndex = actor.influences.findIndex(i => !i.revealed && i.role === claimedRole);
@@ -337,7 +362,9 @@ export function challengeAction(game: GameState, challengerId: string): boolean 
 }
 
 export function declareBlock(game: GameState, blockerId: string, claimedRole: Role): boolean {
-  if (game.phase !== 'block') return false;
+  // A block can come from the combined action window or the post-challenge
+  // block window.
+  if (game.phase !== 'block' && game.phase !== 'action_response') return false;
   const action = game.pendingAction!;
   const config = ACTION_CONFIG[action.type];
 
@@ -345,6 +372,8 @@ export function declareBlock(game: GameState, blockerId: string, claimedRole: Ro
 
   const blocker = getPlayer(game, blockerId)!;
   if (!isAlive(blocker)) return false;
+  if (!getEligibleResponders(game).includes(blockerId)) return false;
+  if (game.respondedPlayers.has(blockerId)) return false;
 
   if (action.type !== 'foreign_aid' && blockerId !== action.targetId) return false;
   bumpVersion(game);
@@ -369,6 +398,7 @@ export function challengeBlock(game: GameState, challengerId: string): boolean {
   bumpVersion(game);
 
   const blockerHasRole = blocker.influences.some(i => !i.revealed && i.role === block.claimedRole);
+  recordChallenge(game, challenger.name, blocker.name, block.claimedRole, blockerHasRole, 'block');
 
   if (blockerHasRole) {
     const cardIndex = blocker.influences.findIndex(i => !i.revealed && i.role === block.claimedRole);
@@ -411,16 +441,9 @@ export function pass(game: GameState, playerId: string): boolean {
   if (!allResponded(game)) return true;
 
   if (game.phase === 'action_response') {
-    const config = ACTION_CONFIG[game.pendingAction!.type];
+    // Nobody challenged or blocked in the combined window — the action stands.
     game.respondedPlayers = new Set();
-    if (config.blockableBy.length > 0) {
-      game.phase = 'block';
-      if (getEligibleResponders(game).length === 0) {
-        resolveAction(game);
-      }
-    } else {
-      resolveAction(game);
-    }
+    resolveAction(game);
   } else if (game.phase === 'block') {
     game.respondedPlayers = new Set();
     resolveAction(game);
@@ -518,6 +541,8 @@ export function resetGame(game: GameState, playerId: string): boolean {
   game.respondedPlayers = new Set();
   game.currentPlayerIndex = 0;
   game.turnNumber = 0;
+  game.phaseDeadline = null;
+  game.lastEvent = null;
   game.log = [];
   game.winner = null;
 
@@ -552,27 +577,36 @@ export function getActiveActor(game: GameState): string | null {
   }
 }
 
-export function getClientState(game: GameState, playerId: string): ClientState {
+export function getClientState(game: GameState, playerId: string, now = 0): ClientState {
   const player = getPlayer(game, playerId);
   const currentPlayer = game.phase !== 'lobby' && game.phase !== 'game_over'
     ? getCurrentPlayer(game)
     : game.players[0];
 
   const eligible = getEligibleResponders(game);
-  const isEligible = eligible.includes(playerId);
-  const hasResponded = game.respondedPlayers.has(playerId);
+  const canRespond = eligible.includes(playerId) && !game.respondedPlayers.has(playerId);
 
   let canChallenge = false;
   let canBlock = false;
   let blockableBy: Role[] = [];
 
-  if ((game.phase === 'action_response' || game.phase === 'block_response') && isEligible && !hasResponded) {
-    canChallenge = true;
-  }
-
-  if (game.phase === 'block' && isEligible && !hasResponded) {
-    canBlock = true;
-    blockableBy = ACTION_CONFIG[game.pendingAction!.type].blockableBy;
+  if (canRespond) {
+    const action = game.pendingAction;
+    if (game.phase === 'action_response' && action) {
+      const config = ACTION_CONFIG[action.type];
+      if (action.claimedRole) canChallenge = true;
+      const isBlocker = config.blockableBy.length > 0
+        && (action.type === 'foreign_aid' || playerId === action.targetId);
+      if (isBlocker) {
+        canBlock = true;
+        blockableBy = config.blockableBy;
+      }
+    } else if (game.phase === 'block_response') {
+      canChallenge = true;
+    } else if (game.phase === 'block' && action) {
+      canBlock = true;
+      blockableBy = ACTION_CONFIG[action.type].blockableBy;
+    }
   }
 
   return {
@@ -604,7 +638,80 @@ export function getClientState(game: GameState, playerId: string): ClientState {
     log: game.log.slice(-10),
     isHost: playerId === game.hostId,
     stateVersion: game.stateVersion,
+    deadline: game.phaseDeadline,
+    serverNow: now,
+    lastEvent: game.lastEvent,
   };
+}
+
+/**
+ * How long (ms) a player has to act in each phase before the game auto-resolves
+ * on their behalf. Returns null for phases that should never time out (lobby,
+ * game over). Enforced by the transport layer (online only) — single-device
+ * pass-and-play never sets a deadline.
+ */
+export function phaseTimeoutMs(phase: GamePhase): number | null {
+  switch (phase) {
+    case 'action':
+      return 45_000;
+    case 'action_response':
+    case 'block':
+    case 'block_response':
+      return 25_000;
+    case 'lose_influence':
+    case 'exchange':
+      return 30_000;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Performs the least-disruptive default action for whoever the game is waiting
+ * on. Called when a phase deadline passes so one idle player can't stall the
+ * table: responders allow, a player losing influence reveals their first card,
+ * an exchanger keeps their current hand, and an idle turn takes income (or the
+ * forced coup at 10+ coins).
+ */
+export function autoResolve(game: GameState): void {
+  switch (game.phase) {
+    case 'action': {
+      const current = getCurrentPlayer(game);
+      if (current.coins >= 10) {
+        const target = getAlivePlayers(game).find(p => p.id !== current.id);
+        if (target) declareAction(game, current.id, 'coup', target.id);
+      } else {
+        declareAction(game, current.id, 'income');
+      }
+      break;
+    }
+    case 'action_response':
+    case 'block':
+    case 'block_response': {
+      const pending = getEligibleResponders(game).filter(id => !game.respondedPlayers.has(id));
+      for (const id of pending) pass(game, id);
+      break;
+    }
+    case 'lose_influence': {
+      const pid = game.losingPlayerId;
+      if (pid) {
+        const p = getPlayer(game, pid);
+        const idx = p?.influences.findIndex(i => !i.revealed) ?? -1;
+        if (idx >= 0) loseInfluence(game, pid, idx);
+      }
+      break;
+    }
+    case 'exchange': {
+      const pid = game.pendingAction?.playerId;
+      if (pid) {
+        const p = getPlayer(game, pid)!;
+        const keep = p.influences.filter(i => !i.revealed).length;
+        // The player's current cards occupy the first slots of exchangeCards.
+        exchangeSelect(game, pid, Array.from({ length: keep }, (_, i) => i));
+      }
+      break;
+    }
+  }
 }
 
 export function serializeGame(game: GameState): SerializedGameState {

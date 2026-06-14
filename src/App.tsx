@@ -12,6 +12,9 @@ import { ExchangePhase } from './components/game/ExchangePhase';
 import { GameOver } from './components/game/GameOver';
 import { GameLog } from './components/game/GameLog';
 import { PassDevice } from './components/game/PassDevice';
+import { EventBanner } from './components/game/EventBanner';
+import { CountdownTimer } from './components/game/CountdownTimer';
+import { useTurnAlert } from './hooks/useTurnAlert';
 import { GlassCard } from './components/ui/GlassCard';
 import { Button } from './components/ui/Button';
 import { Input } from './components/ui/Input';
@@ -255,6 +258,11 @@ function BoardView({ state, send }: { state: ClientState; send: (msg: ClientMess
             <ExchangePhase key="exchange" state={state} send={send} />
           )}
         </AnimatePresence>
+        {state.deadline != null && (
+          <div className="mt-3">
+            <CountdownTimer deadline={state.deadline} serverNow={state.serverNow} />
+          </div>
+        )}
       </GlassCard>
 
       <GlassCard className="!p-3">
@@ -267,6 +275,8 @@ function BoardView({ state, send }: { state: ClientState; send: (msg: ClientMess
 function OnlineGame({ gameCode, onBack }: { gameCode: string | null; onBack: () => void }) {
   const { gameState: state, error, connected, send } = useGameAPI(true, gameCode);
   const isInGame = !!(state?.myId && state.players.some(p => p.id === state.myId));
+
+  useTurnAlert(state);
 
   if (!connected) {
     return (
@@ -311,6 +321,8 @@ function OnlineGame({ gameCode, onBack }: { gameCode: string | null; onBack: () 
           <GameOver state={state} send={send} />
         </GlassCard>
       )}
+
+      <EventBanner event={state.lastEvent} />
     </motion.div>
   );
 }
@@ -371,7 +383,7 @@ function OnlineLobby({ state, send, onBack }: {
 
 function LocalGame({ onBack }: { onBack: () => void }) {
   const {
-    phase, setupPlayers, clientState, needsPass, activeActorName,
+    phase, setupPlayers, clientState, lastEvent, needsPass, activeActorName,
     addLocalPlayer, removeLocalPlayer, startLocalGame, reveal, send, exit,
   } = useLocalGame();
 
@@ -420,6 +432,8 @@ function LocalGame({ onBack }: { onBack: () => void }) {
           Exit to menu
         </button>
       )}
+
+      <EventBanner event={lastEvent} />
     </motion.div>
   );
 }

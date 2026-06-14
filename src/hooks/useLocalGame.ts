@@ -149,6 +149,7 @@ export function useLocalGame() {
     phase,
     setupPlayers: game.players.map(p => ({ id: p.id, name: p.name })),
     clientState,
+    lastEvent: game.lastEvent,
     needsPass,
     activeActorName,
     addLocalPlayer,

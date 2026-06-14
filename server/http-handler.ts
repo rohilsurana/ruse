@@ -15,7 +15,26 @@ import {
   exchangeSelect,
   resetGame,
   getClientState,
+  autoResolve,
+  phaseTimeoutMs,
 } from './game-engine.js';
+
+// Reset the response/turn deadline for the game's current phase. Called after
+// every action so the clock reflects the latest activity.
+function touchDeadline(game: GameState): void {
+  const ms = phaseTimeoutMs(game.phase);
+  game.phaseDeadline = ms == null ? null : Date.now() + ms;
+}
+
+// Lazily enforce timeouts: if the deadline has passed, auto-resolve on the idle
+// player's behalf and arm a fresh deadline for whatever phase we land in.
+function enforceDeadline(game: GameState): void {
+  let guard = 0;
+  while (game.phaseDeadline != null && Date.now() > game.phaseDeadline && guard++ < 32) {
+    autoResolve(game);
+    touchDeadline(game);
+  }
+}
 
 function generateGameCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -72,7 +91,7 @@ export function handleJoin(req: Request, res: Response): void {
   }
 
   playerSessions.set(playerId, { gameCode: game.gameCode, lastSeen: Date.now() });
-  res.json({ playerId, gameCode: game.gameCode, state: getClientState(game, playerId) });
+  res.json({ playerId, gameCode: game.gameCode, state: getClientState(game, playerId, Date.now()) });
 }
 
 function dispatchAction(
@@ -128,7 +147,8 @@ export function handleAction(req: Request, res: Response): void {
     return;
   }
 
-  res.json({ state: getClientState(game, playerId as string) });
+  touchDeadline(game);
+  res.json({ state: getClientState(game, playerId as string, Date.now()) });
 }
 
 export function handleGetState(req: Request, res: Response): void {
@@ -155,5 +175,6 @@ export function handleGetState(req: Request, res: Response): void {
   const session = playerSessions.get(playerId);
   if (session) session.lastSeen = Date.now();
 
-  res.json({ state: getClientState(game, playerId) });
+  enforceDeadline(game);
+  res.json({ state: getClientState(game, playerId, Date.now()) });
 }

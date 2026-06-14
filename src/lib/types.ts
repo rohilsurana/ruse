@@ -29,6 +29,16 @@ export interface PendingBlock {
   claimedRole: Role;
 }
 
+export interface GameEvent {
+  seq: number;
+  kind: 'challenge';
+  context: 'action' | 'block';
+  challengerName: string;
+  claimantName: string;
+  claimedRole: Role;
+  proven: boolean;
+}
+
 export interface ClientPlayer {
   id: string;
   name: string;
@@ -58,6 +68,9 @@ export interface ClientState {
   log: string[];
   isHost: boolean;
   stateVersion: number;
+  deadline: number | null;
+  serverNow: number;
+  lastEvent: GameEvent | null;
 }
 
 export type ClientMessage =
